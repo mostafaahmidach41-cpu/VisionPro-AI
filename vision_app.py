@@ -28,7 +28,7 @@ st.markdown("""
 # --- 3. Model Initialization ---
 @st.cache_resource
 def load_yolo_model():
-    # Downloads yolov8n.pt automatically on first run
+    # Automatically downloads yolov8n.pt if not present in the repository
     return YOLO("yolov8n.pt")
 
 model = load_yolo_model()
@@ -39,15 +39,15 @@ class VideoTransformer(VideoProcessorBase):
         self.model = model
 
     def recv(self, frame):
+        # Convert incoming WebRTC frame to numpy array (BGR format)
         img = frame.to_ndarray(format="bgr24")
 
-        # Run AI Inference
+        # Run AI Inference (YOLOv8)
         results = self.model(img, conf=0.5, verbose=False)
         
-        # Annotate Frame
+        # Annotate Frame with detection boxes and labels
         annotated_frame = results[0].plot()
 
-        # Detection Metadata (Can be extended to display on UI)
         return annotated_frame
 
 # --- 5. Main Interface ---
@@ -60,7 +60,7 @@ col_stream, col_info = st.columns([2, 1])
 with col_stream:
     st.subheader("📷 Live Neural Scan")
     
-    # WebRTC configuration for STUN servers (essential for Cloud deployment)
+    # WebRTC configuration for STUN servers (Crucial for Cloud Deployment)
     RTC_CONFIG = RTCConfiguration(
         {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
     )
@@ -77,6 +77,7 @@ with col_info:
     st.subheader("🧠 System Analytics")
     st.info("System is ready. Click 'Start' to begin live neural processing.")
     
+    # Expandable technical specifications based on your current build
     with st.expander("Technical Specifications"):
         st.write("**Architecture:** YOLOv8 Nano")
         st.write("**Framework:** Streamlit + WebRTC")
