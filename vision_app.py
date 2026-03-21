@@ -3,87 +3,79 @@ from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfigurati
 import cv2
 from ultralytics import YOLO
 import numpy as np
+from streamlit_js_eval import streamlit_js_eval
 
 # --- 1. Page Configuration ---
-st.set_page_config(
-    page_title="VisionPro AI | Performance Terminal",
-    page_icon="👁️",
-    layout="wide"
-)
+st.set_page_config(page_title="VisionPro AI | Audio Alert", page_icon="🔔", layout="wide")
 
-# --- 2. Advanced CSS for Professional UI ---
-st.markdown("""
-    <style>
-    .main { background-color: #0e1117; color: #ffffff; }
-    .stMetric { 
-        background-color: #161b22; 
-        padding: 20px; 
-        border-radius: 12px; 
-        border: 1px solid #30363d;
-    }
-    footer {visibility: hidden;}
-    </style>
-    """, unsafe_allow_html=True)
+# --- 2. Audio Alert Logic ---
+# Link to a short notification sound (Beep)
+BEEP_URL = "https://www.soundjay.com/buttons/beep-01a.mp3"
 
-# --- 3. High-Performance Model Loading ---
+def play_alert():
+    # Execute JS to play sound in the user's browser
+    streamlit_js_eval(code=f"new Audio('{BEEP_URL}').play();")
+
+# --- 3. Optimized Model Loading ---
 @st.cache_resource
-def load_optimized_model():
-    # Using 'yolov8n.pt' (Nano) - The fastest YOLOv8 model for cloud deployment
+def load_model():
     return YOLO("yolov8n.pt")
 
-model = load_optimized_model()
+model = load_model()
 
-# --- 4. Optimized Neural Engine ---
+# --- 4. Neural Engine with Detection Logic ---
 class VisionTransformer(VideoProcessorBase):
     def __init__(self):
         self.model = model
+        self.alert_triggered = False
 
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
-
-        # ENHANCEMENT: verbose=False reduces overhead and increases FPS
-        # ENHANCEMENT: imgsz=320 speeds up processing while maintaining accuracy for people
+        
+        # Inference with speed optimizations
         results = self.model(img, conf=0.55, verbose=False, imgsz=320)
         
-        # Draw detection boxes
-        annotated_frame = results[0].plot()
+        # Check for 'person' class (ID 0 in COCO)
+        persons = [r for r in results[0].boxes.cls if int(r) == 0]
+        
+        if len(persons) > 0 and not self.alert_triggered:
+            # Mark that a person was found to trigger the sound in the main thread
+            st.session_state["person_found"] = True
+            self.alert_triggered = True
+        elif len(persons) == 0:
+            self.alert_triggered = False
+            st.session_state["person_found"] = False
 
-        return annotated_frame
+        return results[0].plot()
 
-# --- 5. Main Terminal UI ---
+# --- 5. User Interface ---
 st.title("👁️ VisionPro AI - Neural Terminal")
-st.markdown("Independent Real-time Object Detection v2.0")
+st.markdown("v2.1 | Real-time Detection with Audio Alerts")
 st.divider()
+
+if st.session_state.get("person_found", False):
+    st.warning("⚠️ Person Detected!")
+    play_alert() # Trigger the audio via JS
 
 col_stream, col_analytics = st.columns([2, 1])
 
 with col_stream:
-    st.subheader("📷 Visual Input Feed")
-    
-    # RTC configuration for low-latency streaming
-    RTC_CONFIG = RTCConfiguration(
-        {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-    )
-
+    RTC_CONFIG = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
     webrtc_streamer(
-        key="vision-v2",
+        key="vision-audio",
         video_processor_factory=VisionTransformer,
         rtc_configuration=RTC_CONFIG,
         media_stream_constraints={"video": True, "audio": False},
-        async_processing=True, # Critical for speed
+        async_processing=True
     )
 
 with col_analytics:
     st.subheader("🧠 Live Neural Analytics")
+    st.info("System Standby: Audio alerts are ACTIVE when a person is detected.")
     
-    # The image shows the new analytics dashboard
-    st.info("System Standby: Click 'Start' to activate neural scan.")
-    
-    with st.expander("Technical Specifications"):
-        st.write("**Engine:** YOLOv8 Nano (v8.1+)")
-        st.write("**Optimization:** Asynchronous Frame Processing")
-        st.write("**Deployment:** Streamlit Cloud (Python 3.11)")
+    with st.expander("Technical Specs"):
+        st.write("**Audio Engine:** Client-side JavaScript")
+        st.write("**Detection Engine:** YOLOv8 Nano")
 
-# --- 6. Professional Footer ---
 st.divider()
-st.caption("VisionPro AI Enterprise | Architecture: YOLOv8 | Status: ACTIVE")
+st.caption("VisionPro AI Enterprise | Global Operational Status: ACTIVE")
