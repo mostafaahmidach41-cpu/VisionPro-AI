@@ -4,17 +4,17 @@ import cv2
 from ultralytics import YOLO
 import numpy as np
 from streamlit_js_eval import streamlit_js_eval
+from datetime import datetime
+import pandas as pd
 
 # --- 1. Page Configuration ---
-st.set_page_config(page_title="VisionPro AI | Audio Alert", page_icon="🔔", layout="wide")
+st.set_page_config(page_title="VisionPro AI | Activity Log", page_icon="📝", layout="wide")
 
-# --- 2. Audio Alert Logic ---
-# Link to a short notification sound (Beep)
-BEEP_URL = "https://www.soundjay.com/buttons/beep-01a.mp3"
-
-def play_alert():
-    # Execute JS to play sound in the user's browser
-    streamlit_js_eval(code=f"new Audio('{BEEP_URL}').play();")
+# --- 2. Session State Initialization ---
+if "detection_log" not in st.session_state:
+    st.session_state["detection_log"] = []
+if "person_found" not in st.session_state:
+    st.session_state["person_found"] = False
 
 # --- 3. Optimized Model Loading ---
 @st.cache_resource
@@ -23,59 +23,59 @@ def load_model():
 
 model = load_model()
 
-# --- 4. Neural Engine with Detection Logic ---
+# --- 4. Neural Engine with Logging Logic ---
 class VisionTransformer(VideoProcessorBase):
     def __init__(self):
         self.model = model
-        self.alert_triggered = False
+        self.last_log_time = 0
 
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
-        
-        # Inference with speed optimizations
         results = self.model(img, conf=0.55, verbose=False, imgsz=320)
         
-        # Check for 'person' class (ID 0 in COCO)
         persons = [r for r in results[0].boxes.cls if int(r) == 0]
         
-        if len(persons) > 0 and not self.alert_triggered:
-            # Mark that a person was found to trigger the sound in the main thread
+        if len(persons) > 0:
             st.session_state["person_found"] = True
-            self.alert_triggered = True
-        elif len(persons) == 0:
-            self.alert_triggered = False
+            # Log detection every 5 seconds to avoid flooding the log
+            current_time = datetime.now()
+            if (current_time.second % 5 == 0): 
+                log_entry = {"Timestamp": current_time.strftime("%H:%M:%S"), "Status": "🚨 Person Detected"}
+                if log_entry not in st.session_state["detection_log"][-1:]:
+                    st.session_state["detection_log"].append(log_entry)
+        else:
             st.session_state["person_found"] = False
 
         return results[0].plot()
 
 # --- 5. User Interface ---
 st.title("👁️ VisionPro AI - Neural Terminal")
-st.markdown("v2.1 | Real-time Detection with Audio Alerts")
+st.markdown("v2.2 | Real-time Detection & Activity Logging")
 st.divider()
 
-if st.session_state.get("person_found", False):
-    st.warning("⚠️ Person Detected!")
-    play_alert() # Trigger the audio via JS
-
-col_stream, col_analytics = st.columns([2, 1])
+col_stream, col_side = st.columns([2, 1])
 
 with col_stream:
     RTC_CONFIG = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
     webrtc_streamer(
-        key="vision-audio",
+        key="vision-log",
         video_processor_factory=VisionTransformer,
         rtc_configuration=RTC_CONFIG,
         media_stream_constraints={"video": True, "audio": False},
         async_processing=True
     )
 
-with col_analytics:
-    st.subheader("🧠 Live Neural Analytics")
-    st.info("System Standby: Audio alerts are ACTIVE when a person is detected.")
+with col_side:
+    st.subheader("📝 Live Activity Log")
+    if st.session_state["detection_log"]:
+        df = pd.DataFrame(st.session_state["detection_log"]).iloc[::-1] # Show latest first
+        st.table(df.head(10)) # Display last 10 detections
+    else:
+        st.write("No activity recorded yet.")
     
-    with st.expander("Technical Specs"):
-        st.write("**Audio Engine:** Client-side JavaScript")
-        st.write("**Detection Engine:** YOLOv8 Nano")
+    if st.button("Clear Log"):
+        st.session_state["detection_log"] = []
+        st.rerun()
 
 st.divider()
-st.caption("VisionPro AI Enterprise | Global Operational Status: ACTIVE")
+st.caption("VisionPro AI Enterprise | Architecture: YOLOv8 | Global Operational Status: ACTIVE")
